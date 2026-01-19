@@ -8,7 +8,7 @@ import cv2
 import os
 
 image_path = "/home/lois/Documents/dnn/data/train_data/1996.jpg"
-model_path = "../snapshots/Epoch_Final.pth"
+model_path = "../snapshots/exp4/Epoch_Final.pth"
 output_path = "result_dnn.png"
 
 class enhance_net_nopool(nn.Module):
