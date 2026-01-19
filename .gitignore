@@ -1,5 +1,7 @@
 .venv/
-*.png
 *.jpg
 *.jpeg
 *.gif
+analysis_output/
+data/
+batch
