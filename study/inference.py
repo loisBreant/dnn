@@ -7,6 +7,10 @@ import numpy as np
 import cv2
 import os
 
+image_path = "/home/lois/Documents/dnn/data/train_data/1996.jpg"
+model_path = "../snapshots/Epoch_Final.pth"
+output_path = "result_dnn.png"
+
 class enhance_net_nopool(nn.Module):
     def __init__(self):
         super(enhance_net_nopool, self).__init__()
@@ -42,11 +46,6 @@ class enhance_net_nopool(nn.Module):
         r = torch.cat([r1,r2,r3,r4,r5,r6,r7,r8],1)
         return enhance_image_1,enhance_image,r
 
-image_path = "/home/lois/Documents/dnn/baseline/init.png"
-model_path = "snapshots/Epoch_Final.pth"
-output_path = "result_dnn.png"
-
-# --- 3. CHARGEMENT ET INFERENCE ---
 def run_inference(image_path, model_path, output_path):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
