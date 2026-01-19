@@ -23,9 +23,13 @@ os.remove(output_zip)
 
 print(f"Nombre d'images trouvées : {len(os.listdir(destination_folder))}")
 
-
 # Download the LOL dataset from Kaggle: for testing purpose
 path = kagglehub.dataset_download("soumikrakshit/lol-dataset")
 print(path)
 os.makedirs("data/test_data", exist_ok=True)
 os.system(f"mv {path}/* data/test_data/")
+
+# Download the Adobe FiveK dataset: for testing purpose
+path_fivek = kagglehub.dataset_download("weipengzhang/adobe-fivek")
+os.makedirs("data/test_data/adobe_fivek", exist_ok=True)
+os.system(f"cp -r {path_fivek}/* data/test_data/adobe_fivek/")
