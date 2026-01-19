@@ -7,9 +7,9 @@ import numpy as np
 import cv2
 import os
 
-image_path = "/home/lois/Documents/dnn/data/train_data/1996.jpg"
-model_path = "../snapshots/exp4/Epoch_Final.pth"
-output_path = "result_dnn.png"
+image_path = "../data/test_data/lol_dataset/our485/low/64.png"
+model_path = "../Zero-DCE/Zero-DCE_code/snapshots/Epoch99.pth"
+output_path = "result_ref.png"
 
 class enhance_net_nopool(nn.Module):
     def __init__(self):
