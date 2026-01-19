@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 from skimage.measure import shannon_entropy
+from skimage.metrics import peak_signal_noise_ratio as psnr
+from skimage.metrics import structural_similarity as ssim
 from PIL import Image
 import glob
 import random
@@ -162,10 +164,169 @@ def run_full_comparison(model, img_path):
     plt.tight_layout()
     plt.show()
     
+def process_all_images(model, image_dir):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    img_paths = glob.glob(os.path.join(image_dir, "*.png"))
+    
+    if not img_paths:
+        print(f"No images found in {image_dir}")
+        return
+    
+    print(f"Processing {len(img_paths)} images from {image_dir}\n")
+    
+    total_metrics = {
+        "Original": {"entropy": 0, "gradient": 0, "psnr": 0, "ssim": 0, "mae": 0},
+        "Gamma": {"entropy": 0, "gradient": 0, "psnr": 0, "ssim": 0, "mae": 0},
+        "CLAHE": {"entropy": 0, "gradient": 0, "psnr": 0, "ssim": 0, "mae": 0},
+        "Zero-DCE": {"entropy": 0, "gradient": 0, "psnr": 0, "ssim": 0, "mae": 0}
+    }
+    
+    hist_accumulators = {
+        "Original": np.zeros(256),
+        "Gamma": np.zeros(256),
+        "CLAHE": np.zeros(256),
+        "Zero-DCE": np.zeros(256)
+    }
+    
+    high_dir = image_dir.replace("/low", "/high")
+    if not os.path.exists(high_dir):
+        high_dir = None
+    
+    for idx, img_path in enumerate(sorted(img_paths), 1):
+        print(f"Processing image {idx}/{len(img_paths)}: {img_path}")
+        
+        img_org = open_image(img_path)
+        if img_org is None:
+            continue
+        
+        img_ref = None
+        if high_dir:
+            ref_path = os.path.join(high_dir, os.path.basename(img_path))
+            if os.path.exists(ref_path):
+                img_ref = open_image(ref_path)
+                img_ref_rgb = cv2.cvtColor(img_ref, cv2.COLOR_BGR2RGB) if img_ref is not None else None
+        
+        img_gamma_bgr = apply_autogamma(img_org)
+        
+        img_clahe_bgr = apply_clahe(img_org)
+        
+        data_lowlight = Image.open(img_path).convert('RGB')
+        data_lowlight = (np.asarray(data_lowlight)/255.0)
+        data_lowlight = torch.from_numpy(data_lowlight).float().permute(2,0,1).unsqueeze(0).to(device)
+        
+        model.eval()
+        with torch.no_grad():
+            _, enhanced_image, _ = model(data_lowlight)
+        res_deep = enhanced_image.squeeze().cpu().permute(1, 2, 0).numpy()
+        res_deep = np.clip(res_deep * 255, 0, 255).astype('uint8')
+        img_deep_bgr = cv2.cvtColor(res_deep, cv2.COLOR_RGB2BGR)
+        
+        ent_org, grad_org = get_metrics(img_org)
+        ent_gamma, grad_gamma = get_metrics(img_gamma_bgr)
+        ent_clahe, grad_clahe = get_metrics(img_clahe_bgr)
+        ent_deep, grad_deep = get_metrics(img_deep_bgr)
+        
+        total_metrics["Original"]["entropy"] += ent_org
+        total_metrics["Original"]["gradient"] += grad_org
+        total_metrics["Gamma"]["entropy"] += ent_gamma
+        total_metrics["Gamma"]["gradient"] += grad_gamma
+        total_metrics["CLAHE"]["entropy"] += ent_clahe
+        total_metrics["CLAHE"]["gradient"] += grad_clahe
+        total_metrics["Zero-DCE"]["entropy"] += ent_deep
+        total_metrics["Zero-DCE"]["gradient"] += grad_deep
+        
+        gray_org = cv2.cvtColor(img_org, cv2.COLOR_BGR2GRAY)
+        gray_gamma = cv2.cvtColor(img_gamma_bgr, cv2.COLOR_BGR2GRAY)
+        gray_clahe = cv2.cvtColor(img_clahe_bgr, cv2.COLOR_BGR2GRAY)
+        gray_deep = cv2.cvtColor(img_deep_bgr, cv2.COLOR_BGR2GRAY)
+        
+        hist_accumulators["Original"] += cv2.calcHist([gray_org], [0], None, [256], [0, 256]).flatten()
+        hist_accumulators["Gamma"] += cv2.calcHist([gray_gamma], [0], None, [256], [0, 256]).flatten()
+        hist_accumulators["CLAHE"] += cv2.calcHist([gray_clahe], [0], None, [256], [0, 256]).flatten()
+        hist_accumulators["Zero-DCE"] += cv2.calcHist([gray_deep], [0], None, [256], [0, 256]).flatten()
+        
+        if img_ref_rgb is not None:
+            img_org_rgb = cv2.cvtColor(img_org, cv2.COLOR_BGR2RGB)
+            img_gamma_rgb = cv2.cvtColor(img_gamma_bgr, cv2.COLOR_BGR2RGB)
+            img_clahe_rgb = cv2.cvtColor(img_clahe_bgr, cv2.COLOR_BGR2RGB)
+            img_deep_rgb = res_deep
+            
+            total_metrics["Original"]["psnr"] += psnr(img_ref_rgb, img_org_rgb)
+            total_metrics["Original"]["ssim"] += ssim(img_ref_rgb, img_org_rgb, channel_axis=2)
+            total_metrics["Original"]["mae"] += np.mean(np.abs(img_ref_rgb.astype(float) - img_org_rgb.astype(float)))
+            
+            total_metrics["Gamma"]["psnr"] += psnr(img_ref_rgb, img_gamma_rgb)
+            total_metrics["Gamma"]["ssim"] += ssim(img_ref_rgb, img_gamma_rgb, channel_axis=2)
+            total_metrics["Gamma"]["mae"] += np.mean(np.abs(img_ref_rgb.astype(float) - img_gamma_rgb.astype(float)))
+            
+            total_metrics["CLAHE"]["psnr"] += psnr(img_ref_rgb, img_clahe_rgb)
+            total_metrics["CLAHE"]["ssim"] += ssim(img_ref_rgb, img_clahe_rgb, channel_axis=2)
+            total_metrics["CLAHE"]["mae"] += np.mean(np.abs(img_ref_rgb.astype(float) - img_clahe_rgb.astype(float)))
+            
+            total_metrics["Zero-DCE"]["psnr"] += psnr(img_ref_rgb, img_deep_rgb)
+            total_metrics["Zero-DCE"]["ssim"] += ssim(img_ref_rgb, img_deep_rgb, channel_axis=2)
+            total_metrics["Zero-DCE"]["mae"] += np.mean(np.abs(img_ref_rgb.astype(float) - img_deep_rgb.astype(float)))
+    
+    num_images = len(img_paths)
+    
+    results = {
+        "Method": ["Original", "Gamma", "CLAHE", "Zero-DCE"],
+        "Total Entropy": [
+            total_metrics["Original"]["entropy"],
+            total_metrics["Gamma"]["entropy"],
+            total_metrics["CLAHE"]["entropy"],
+            total_metrics["Zero-DCE"]["entropy"]
+        ],
+        "Total Gradient": [
+            total_metrics["Original"]["gradient"],
+            total_metrics["Gamma"]["gradient"],
+            total_metrics["CLAHE"]["gradient"],
+            total_metrics["Zero-DCE"]["gradient"]
+        ],
+        "Mean PSNR": [
+            total_metrics["Original"]["psnr"] / num_images if high_dir else 0,
+            total_metrics["Gamma"]["psnr"] / num_images if high_dir else 0,
+            total_metrics["CLAHE"]["psnr"] / num_images if high_dir else 0,
+            total_metrics["Zero-DCE"]["psnr"] / num_images if high_dir else 0
+        ],
+        "Mean SSIM": [
+            total_metrics["Original"]["ssim"] / num_images if high_dir else 0,
+            total_metrics["Gamma"]["ssim"] / num_images if high_dir else 0,
+            total_metrics["CLAHE"]["ssim"] / num_images if high_dir else 0,
+            total_metrics["Zero-DCE"]["ssim"] / num_images if high_dir else 0
+        ],
+        "Mean MAE": [
+            total_metrics["Original"]["mae"] / num_images if high_dir else 0,
+            total_metrics["Gamma"]["mae"] / num_images if high_dir else 0,
+            total_metrics["CLAHE"]["mae"] / num_images if high_dir else 0,
+            total_metrics["Zero-DCE"]["mae"] / num_images if high_dir else 0
+        ]
+    }
+    df = pd.DataFrame(results)
+    print(df.round(3).to_string(index=False))
+    print()
+    
+    plt.figure(figsize=(12, 6))
+    
+    labels = ["Original", "Gamma", "CLAHE", "Zero-DCE"]
+    colors = ['blue', 'orange', 'green', 'red']
+    
+    for label, color in zip(labels, colors):
+        plt.plot(hist_accumulators[label], label=label, color=color, alpha=0.7)
+    
+    plt.title(f"Accumulated Histogram Comparison ({len(img_paths)} images)")
+    plt.xlabel("Luminosity")
+    plt.ylabel("Frequency")
+    plt.legend()
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 DCE_net = enhance_net_nopool().to(device)
-model_path = "../snapshots/exp4/Epoch_Final.pth"
-img_path = "../data/test_data/lol_dataset/eval15/low/22.png"
+model_path = "snapshots/exp4/Epoch_Final.pth"
+image_dir = "data/test_data/lol_dataset/eval15/low"
 
 DCE_net.load_state_dict(torch.load(model_path, map_location=device))
-run_full_comparison(DCE_net, img_path)
+process_all_images(DCE_net, image_dir)
