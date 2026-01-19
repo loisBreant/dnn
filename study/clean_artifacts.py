@@ -8,7 +8,7 @@ def apply_sharpening(img, strength=0.5):
     unsharp_image = cv2.addWeighted(img, 1.0 + strength, gaussian_3, -strength, 0)
     return unsharp_image
 
-def clean_artifacts(image_path, h_strength=3, bi_sigma=25):
+def clean_artifacts(image_path, h_strength=3):
     img = cv2.imread(image_path)
     
     dst_nlm = cv2.fastNlMeansDenoisingColored(img, None, h=h_strength, hColor=h_strength, templateWindowSize=7, searchWindowSize=21)
@@ -27,4 +27,4 @@ if not os.path.exists(target_img):
         target_img = potential_files[0]
         print(f"Test sur : {target_img}")
 
-clean_artifacts(target_img, h_strength=3, bi_sigma=25)
+clean_artifacts(target_img, h_strength=3)

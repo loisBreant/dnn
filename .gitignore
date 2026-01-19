@@ -6,3 +6,4 @@
 analysis_output/
 data/
 batch
+__pycache__/
