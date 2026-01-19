@@ -2,7 +2,7 @@ import cv2
 import math
 import numpy as np
 
-image_path = '/home/lois/Documents/dnn/data/train_data/22.jpg'
+image_path = '../data/test_data/lol_dataset/eval15/low/22.png'
 gamma_value = 0.8 
 
 def open_image(img_path) :
@@ -19,7 +19,7 @@ def gamma_correction(img, gamma=1.0):
 
     result = cv2.LUT(img, table)
 
-    cv2.imwrite('result.png', result)
+    cv2.imwrite('result_gamma.png', result)
 
 
 def gamma_autocorrection(img):
@@ -28,16 +28,23 @@ def gamma_autocorrection(img):
     h, s, v = cv2.split(hsv) # hue, saturation, value 
 
     mean_brightness = np.mean(v)
-
     target = 128  # mid-gray
-    # want to find (0.5 = mean_brightness ^ A )
-    # gamma = log(target) / log(current)  (en normalisant sur 0-1)
-    gamma_val = math.log(target / 255.0) / math.log((mean_brightness + 1e-6) / 255.0)
-    print(f"gamma_val: {gamma_value}")
-    gamma_correction(img, gamma_val)
+
+    if mean_brightness < 1e-6:
+        print("Image is too dark (black), skipping.")
+        return
+
+    exponent = math.log(target / 255.0) / math.log(mean_brightness / 255.0) 
+    gamma_param = 1.0 / exponent
+    
+    print(f"Mean brightness: {mean_brightness:.2f}")
+    print(f"Calculated exponent: {exponent:.2f}")
+    print(f"Applied Gamma parameter: {gamma_param:.2f}")
+    
+    gamma_correction(img, gamma_param)
 
 
 if __name__ == "__main__":
     img = open_image(image_path)
-    gamma_autocorrection(img)
-    # gamma_correction(img, gamma_value)
+    if img is not None:
+        gamma_autocorrection(img)
