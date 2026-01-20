@@ -1,0 +1,9 @@
+.git
+.venv
+.direnv
+__pycache__
+logs
+slides
+tmp
+analysis_notebook.ipynb
+notebook.ipynb
