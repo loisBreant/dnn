@@ -323,10 +323,11 @@ def process_all_images(model, image_dir):
     plt.tight_layout()
     plt.show()
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-DCE_net = enhance_net_nopool().to(device)
-model_path = "snapshots/exp4/Epoch_Final.pth"
-image_dir = "data/test_data/lol_dataset/eval15/low"
+if __name__ == "__main__":
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    DCE_net = enhance_net_nopool().to(device)
+    model_path = "snapshots/exp4/Epoch_Final.pth"
+    image_dir = "data/test_data/lol_dataset/eval15/low"
 
-DCE_net.load_state_dict(torch.load(model_path, map_location=device))
-process_all_images(DCE_net, image_dir)
+    DCE_net.load_state_dict(torch.load(model_path, map_location=device))
+    process_all_images(DCE_net, image_dir)
